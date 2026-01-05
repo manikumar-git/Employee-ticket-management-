@@ -6,28 +6,14 @@ const upload = require("../middleware/upload");
 
 
 
-// CREATE ticket
-router.post("/", (req, res) => {
-  const { title, description, priority } = req.body;
 
-  const sql =
-    "INSERT INTO tickets (title, description, priority) VALUES (?, ?, ?)";
 
-  db.query(sql, [title, description, priority], (err, result) => {
-    if (err) return res.status(500).json(err);
-    res.json({ message: "Ticket created" });
-  });
-});
-
-// GET all tickets
-router.get("/", (req, res) => {
-  db.query("SELECT * FROM tickets", (err, rows) => {
-    if (err) return res.status(500).json(err);
-    res.json(rows);
-  });
-});
+// GET tickets - admin sees all, non-admins see only their own
 router.get("/", verifyToken, (req, res) => {
-  const sql = `
+  const isAdminUser = req.user.role === "admin";
+  const params = [];
+
+  let sql = `
     SELECT
       tickets.id,
       tickets.title,
@@ -35,14 +21,26 @@ router.get("/", verifyToken, (req, res) => {
       tickets.priority,
       tickets.status,
       tickets.user_id,
+      users.id AS employee_id,
       users.name AS employee_name,
       users.email AS employee_email,
-      users.profile_image
+      users.profile_image AS profile_image
     FROM tickets
     JOIN users ON tickets.user_id = users.id
   `;
 
-  db.query(sql, (err, rows) => {
+  // Admin can optionally filter by ?userId=<id>
+  const filterUserId = req.query.userId ? Number(req.query.userId) : null;
+
+  if (!isAdminUser) {
+    sql += " WHERE tickets.user_id = ?";
+    params.push(req.user.id);
+  } else if (filterUserId) {
+    sql += " WHERE tickets.user_id = ?";
+    params.push(filterUserId);
+  }
+
+  db.query(sql, params, (err, rows) => {
     if (err) return res.status(500).json(err);
     res.json(rows);
   });
@@ -126,9 +124,12 @@ router.delete("/:id", verifyToken, (req, res) => {
   });
 });
 
-// DASHBOARD STATS
+// DASHBOARD STATS (role-aware)
 router.get("/stats/dashboard", verifyToken, (req, res) => {
-  const sql = `
+  const isAdminUser = req.user.role === "admin";
+  const params = [];
+
+  let sql = `
     SELECT
       COUNT(*) AS total,
       SUM(status = 'Open') AS open,
@@ -137,26 +138,18 @@ router.get("/stats/dashboard", verifyToken, (req, res) => {
     FROM tickets
   `;
 
-  db.query(sql, (err, result) => {
+  if (!isAdminUser) {
+    sql += " WHERE user_id = ?";
+    params.push(req.user.id);
+  }
+
+  db.query(sql, params, (err, result) => {
     if (err) return res.status(500).json(err);
     res.json(result[0]);
   });
 });
 
-router.post("/", verifyToken, (req, res) => {
-  const { title, description, priority } = req.body;
-  const userId = req.user.id; // 🔥 logged-in employee
 
-  const sql = `
-    INSERT INTO tickets (title, description, priority, user_id)
-    VALUES (?, ?, ?, ?)
-  `;
-
-  db.query(sql, [title, description, priority, userId], (err) => {
-    if (err) return res.status(500).json(err);
-    res.json({ message: "Ticket created" });
-  });
-});
 
 // UPDATE PROFILE (name + image)
 router.put(
