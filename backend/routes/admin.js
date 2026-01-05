@@ -35,4 +35,73 @@ router.post(
     );
   }
 );
+// Get all employees (admin only)
+router.get('/employees', verifyToken, isAdmin, (req, res) => {
+  const sql = "SELECT id, name, email, profile_image FROM users WHERE role = 'employee'";
+  db.query(sql, (err, rows) => {
+    if (err) return res.status(500).json(err);
+    res.json(rows);
+  });
+});
+
+router.get("/employees", async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      "SELECT id, name, email, status FROM users WHERE role = 'employee'"
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ message: "Failed to fetch employees" });
+  }
+});
+
+router.put("/employees/:id", async (req, res) => {
+  const { name, email } = req.body;
+  const { id } = req.params;
+
+  try {
+    await db.query(
+      "UPDATE users SET name = ?, email = ? WHERE id = ?",
+      [name, email, id]
+    );
+    res.json({ message: "Employee updated" });
+  } catch (err) {
+    res.status(500).json({ message: "Update failed" });
+  }
+});
+
+
+router.put("/employees/:id/status", async (req, res) => {
+  const { status } = req.body; // active | hold
+  const { id } = req.params;
+
+  try {
+    await db.query(
+      "UPDATE users SET status = ? WHERE id = ?",
+      [status, id]
+    );
+    res.json({ message: "Status updated" });
+  } catch (err) {
+    res.status(500).json({ message: "Status update failed" });
+  }
+});
+
+
+router.delete("/employees/:id", async (req, res) => {
+  try {
+    await db.query("DELETE FROM users WHERE id = ?", [req.params.id]);
+    res.json({ message: "Employee deleted" });
+  } catch (err) {
+    res.status(500).json({ message: "Delete failed" });
+  }
+});
+
+if (user.status === "hold") {
+  return res.status(403).json({
+    message: "Your account is on hold. Contact admin."
+  });
+}
+
+
+
 module.exports = router;
